@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using SecurityScanner.Commands.Models;
+using SecurityScanner.Core.Models;
 using System.Diagnostics;
 
 namespace SecurityScanner.Commands.Middleware;

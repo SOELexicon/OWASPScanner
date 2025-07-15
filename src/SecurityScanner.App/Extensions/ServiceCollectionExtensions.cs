@@ -8,6 +8,7 @@ using SecurityScanner.Infrastructure.Configuration;
 using SecurityScanner.Infrastructure.Http;
 using SecurityScanner.Infrastructure.Persistence;
 using SecurityScanner.Services.Orchestration;
+using SecurityScanner.Services.Reports;
 using SecurityScanner.Services.Scanners;
 
 namespace SecurityScanner.App.Extensions;
@@ -30,19 +31,24 @@ public static class ServiceCollectionExtensions
 
         // Register scanner services
         services.AddTransient<IScannerService, SecurityHeadersService>();
-        // TODO: Add other scanner services when implemented
-        // services.AddTransient<IScannerService, SslLabsService>();
-        // services.AddTransient<IScannerService, LoadTestService>();
-        // services.AddTransient<IScannerService, OwaspZapService>();
+        services.AddTransient<IScannerService, SslLabsService>();
+        services.AddTransient<IScannerService, LoadTestService>();
+        services.AddTransient<IScannerService, OwaspZapService>();
 
         // Register orchestration services
         services.AddTransient<IScanOrchestrator, ScanOrchestrator>();
+        
+        // Register report services
+        services.AddTransient<IReportService, ReportService>();
 
         // Register command services
         services.AddTransient<IValidationMiddleware, ValidationMiddleware>();
         services.AddTransient<ILoggingMiddleware, LoggingMiddleware>();
         services.AddTransient<IErrorHandlingMiddleware, ErrorHandlingMiddleware>();
         services.AddTransient<IScanCommandHandler, ScanCommandHandler>();
+        services.AddTransient<IHealthCommandHandler, HealthCommandHandler>();
+        services.AddTransient<IReportCommandHandler, ReportCommandHandler>();
+        services.AddTransient<IConfigCommandHandler, ConfigCommandHandler>();
 
         // Register HTTP client factory
         services.AddHttpClient();

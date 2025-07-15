@@ -126,10 +126,36 @@ public class ScanCommandHandler : IScanCommandHandler
         }
     }
 
-    private Task<List<string>> GetDomainsToScanAsync(ScanCommandRequest request)
+    private async Task<List<string>> GetDomainsToScanAsync(ScanCommandRequest request)
     {
         var domains = new List<string>();
 
+        // Load domains from file if specified
+        if (!string.IsNullOrEmpty(request.InputFile))
+        {
+            try
+            {
+                var fileContent = await File.ReadAllTextAsync(request.InputFile);
+                var urlsFromFile = Newtonsoft.Json.JsonConvert.DeserializeObject<string[]>(fileContent);
+                
+                if (urlsFromFile != null && urlsFromFile.Any())
+                {
+                    domains.AddRange(urlsFromFile);
+                    _logger.LogInformation("Loaded {Count} URLs from file: {FilePath}", urlsFromFile.Length, request.InputFile);
+                }
+                else
+                {
+                    _logger.LogWarning("No valid URLs found in file: {FilePath}", request.InputFile);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to load URLs from file: {FilePath}", request.InputFile);
+                throw new InvalidOperationException($"Failed to load URLs from file '{request.InputFile}': {ex.Message}", ex);
+            }
+        }
+
+        // Add domains from command line arguments
         if (request.ScanAll)
         {
             // TODO: In future versions, load from configuration file
@@ -148,7 +174,7 @@ public class ScanCommandHandler : IScanCommandHandler
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        return Task.FromResult(normalizedDomains);
+        return normalizedDomains;
     }
 
     private static string NormalizeDomain(string domain)

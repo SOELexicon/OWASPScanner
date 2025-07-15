@@ -295,6 +295,40 @@ public class SslLabsService : IScannerService
 
         return vulnerabilities;
     }
+
+    public async Task<bool> IsServiceAvailableAsync()
+    {
+        try
+        {
+            var url = $"{_settings.ApiUrl}/api/v3/info";
+            var response = await _httpClient.GetAsync(url);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task<string> GetServiceVersionAsync()
+    {
+        try
+        {
+            var url = $"{_settings.ApiUrl}/api/v3/info";
+            var response = await _httpClient.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                var result = JsonConvert.DeserializeObject<dynamic>(content);
+                return result?.version?.ToString() ?? "SSL Labs API";
+            }
+        }
+        catch
+        {
+            // Ignore errors for version check
+        }
+        return "SSL Labs API";
+    }
 }
 
 // SSL Labs API Response Models

@@ -6,6 +6,7 @@ using SecurityScanner.App.Extensions;
 using SecurityScanner.Commands.Handlers;
 using SecurityScanner.Commands.Models;
 using SecurityScanner.Commands.Parsing;
+using SecurityScanner.Core.Models;
 using System.CommandLine;
 
 namespace SecurityScanner.App;
@@ -34,9 +35,9 @@ public class Program
             }
 
             // Handle scan command manually (simplified approach for beta version)
-            if (args.Length > 0 && !args[0].StartsWith('-'))
+            if (args.Length > 0 && (!args[0].StartsWith('-') || args.Contains("--file")))
             {
-                // Direct domain scan
+                // Direct domain scan (with domains or file input)
                 await HandleSimpleScanAsync(host.Services, args);
                 return 0;
             }
@@ -90,8 +91,7 @@ public class Program
         
         try
         {
-            // Extract domains from command line arguments (simplified)
-            var domains = args.Where(arg => !arg.StartsWith('-')).ToArray();
+            // Parse command line arguments
             var jsonOutput = args.Contains("--json");
             var verbose = args.Contains("--verbose");
             
@@ -103,13 +103,74 @@ public class Program
                 outputFile = args[outputIndex + 1];
             }
 
+            // Get input file if specified
+            string? inputFile = null;
+            var fileIndex = Array.IndexOf(args, "--file");
+            if (fileIndex >= 0 && fileIndex + 1 < args.Length)
+            {
+                inputFile = args[fileIndex + 1];
+            }
+
+            // Get tools if specified
+            var tools = new List<string> { "headers" }; // Default to headers
+            var toolsIndex = Array.IndexOf(args, "--tools");
+            if (toolsIndex >= 0 && toolsIndex + 1 < args.Length)
+            {
+                var toolsArg = args[toolsIndex + 1];
+                tools = toolsArg.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim().ToLowerInvariant())
+                    .ToList();
+            }
+
+            // Extract domains from command line arguments (excluding option values)
+            var domains = new List<string>();
+            for (int i = 0; i < args.Length; i++)
+            {
+                var arg = args[i];
+                
+                // Skip options and their values
+                if (arg.StartsWith('-'))
+                {
+                    if (arg == "--output" || arg == "--file" || arg == "--tools")
+                    {
+                        i++; // Skip the next argument which is the value
+                    }
+                    continue;
+                }
+                
+                // Skip if this argument is a value for a previous option
+                if (i > 0 && (args[i-1] == "--output" || args[i-1] == "--file" || args[i-1] == "--tools"))
+                {
+                    continue;
+                }
+                
+                domains.Add(arg);
+            }
+
+            // Parse tools to scanner types
+            var scannerTypes = new List<Core.Models.ScannerType>();
+            foreach (var tool in tools)
+            {
+                var scannerType = tool switch
+                {
+                    "headers" => Core.Models.ScannerType.SecurityHeaders,
+                    "ssl" => Core.Models.ScannerType.SslLabs,
+                    "zap" => Core.Models.ScannerType.OwaspZap,
+                    "loadtest" => Core.Models.ScannerType.LoadTest,
+                    "nmap" => Core.Models.ScannerType.Nmap,
+                    _ => throw new ArgumentException($"Unknown scanner tool: {tool}")
+                };
+                scannerTypes.Add(scannerType);
+            }
+
             // Create a basic scan request
             var request = new ScanCommandRequest
             {
-                Domains = domains.ToList(),
-                Tools = new List<Core.Models.ScannerType> { Core.Models.ScannerType.SecurityHeaders },
+                Domains = domains,
+                Tools = scannerTypes,
                 JsonOutput = jsonOutput,
                 OutputFile = outputFile,
+                InputFile = inputFile,
                 Verbose = verbose,
                 MaxConcurrent = 3,
                 TimeoutSeconds = 300,

@@ -44,7 +44,9 @@ public class OwaspZapService : IScannerService
             if (!await IsZapAvailableAsync(cancellationToken))
             {
                 result.Status = ScanStatus.Failed;
-                result.ErrorMessage = "OWASP ZAP is not available. Please ensure ZAP is running and accessible.";
+                result.ErrorMessage = $"OWASP ZAP is not available at {_settings.ApiUrl}. Please ensure ZAP is running and the API is enabled. Check: Tools > Options > API > Enable API (checked), Secure Only (unchecked), API Key configured.";
+                _logger.LogError("ZAP unavailable for domain {Domain}. Configured URL: {ApiUrl}", 
+                    domain.Name, _settings.ApiUrl);
                 return result;
             }
 
@@ -54,7 +56,10 @@ public class OwaspZapService : IScannerService
 
             try
             {
-                // Spider the target
+                // Add target URL to ZAP context (makes it accessible for scanning)
+                await AddUrlToContextAsync(domain.Url, cancellationToken);
+
+                // Spider the target (passive scan)
                 if (_settings.EnablePassiveScan)
                 {
                     _logger.LogInformation("Starting spider scan for {Domain}", domain.Name);
@@ -72,7 +77,14 @@ public class OwaspZapService : IScannerService
                 var zapResults = await GetScanResultsAsync(cancellationToken);
                 result.Vulnerabilities = ConvertZapVulnerabilities(zapResults, domain.Url);
                 result.Status = ScanStatus.Completed;
+                
+                // Store ZAP-specific data
+                if (result.ScannerSpecificData == null)
+                {
+                    result.ScannerSpecificData = new Dictionary<string, object>();
+                }
                 result.ScannerSpecificData["zapResults"] = zapResults;
+                result.ScannerSpecificData["sessionName"] = sessionName;
 
                 _logger.LogInformation("Completed OWASP ZAP scan for {Domain}. Found {IssueCount} issues", 
                     domain.Name, result.VulnerabilityCount);
@@ -101,12 +113,53 @@ public class OwaspZapService : IScannerService
     {
         try
         {
+            // Try with API key first (ZAP usually requires this)
             var url = $"{_settings.ApiUrl}/JSON/core/view/version/";
+            if (!string.IsNullOrEmpty(_settings.ApiKey))
+            {
+                url += $"?apikey={_settings.ApiKey}";
+            }
+            
+            _logger.LogDebug("Checking ZAP availability at: {Url}", url);
+            
             var response = await _httpClient.GetAsync(url, cancellationToken);
-            return response.IsSuccessStatusCode;
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            
+            _logger.LogDebug("ZAP version check response: Status={StatusCode}, Content={Content}", 
+                response.StatusCode, content);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("ZAP is available at {Url}", url);
+                return true;
+            }
+            
+            // If that fails, try without API key
+            if (!string.IsNullOrEmpty(_settings.ApiKey))
+            {
+                var urlWithoutKey = $"{_settings.ApiUrl}/JSON/core/view/version/";
+                _logger.LogDebug("Retrying ZAP availability check without API key at: {Url}", urlWithoutKey);
+                
+                response = await _httpClient.GetAsync(urlWithoutKey, cancellationToken);
+                content = await response.Content.ReadAsStringAsync(cancellationToken);
+                
+                _logger.LogDebug("ZAP version check without API key response: Status={StatusCode}, Content={Content}", 
+                    response.StatusCode, content);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    _logger.LogInformation("ZAP is available at {Url} without API key", urlWithoutKey);
+                    return true;
+                }
+            }
+            
+            _logger.LogWarning("ZAP version check failed with status: {StatusCode}", response.StatusCode);
+            return false;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to connect to ZAP at {Url}. Error: {Error}", 
+                _settings.ApiUrl, ex.Message);
             return false;
         }
     }
@@ -119,8 +172,18 @@ public class OwaspZapService : IScannerService
             url += $"&apikey={_settings.ApiKey}";
         }
 
+        _logger.LogDebug("Creating ZAP session: {SessionName} at {Url}", sessionName, url);
         var response = await _httpClient.GetAsync(url, cancellationToken);
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogError("Failed to create ZAP session. Status: {StatusCode}, Content: {Content}", 
+                response.StatusCode, content);
+        }
+        
         response.EnsureSuccessStatusCode();
+        _logger.LogInformation("Successfully created ZAP session: {SessionName}", sessionName);
     }
 
     private async Task DeleteSessionAsync(string sessionName, CancellationToken cancellationToken)
@@ -149,16 +212,24 @@ public class OwaspZapService : IScannerService
             url += $"&apikey={_settings.ApiKey}";
         }
 
+        _logger.LogInformation("Starting spider scan for URL: {TargetUrl}", targetUrl);
         var response = await _httpClient.GetAsync(url, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        _logger.LogDebug("Spider scan response: {Content}", content);
+        
         var result = JsonConvert.DeserializeObject<ZapApiResponse>(content);
         var scanId = result?.Scan;
 
         if (!string.IsNullOrEmpty(scanId))
         {
+            _logger.LogInformation("Spider scan started with ID: {ScanId}", scanId);
             await WaitForSpiderCompletionAsync(scanId, cancellationToken);
+        }
+        else
+        {
+            _logger.LogWarning("Spider scan did not return a scan ID");
         }
     }
 
@@ -172,6 +243,11 @@ public class OwaspZapService : IScannerService
             await Task.Delay(10000, cancellationToken);
 
             var url = $"{_settings.ApiUrl}/JSON/spider/view/status/?scanId={scanId}";
+            if (!string.IsNullOrEmpty(_settings.ApiKey))
+            {
+                url += $"&apikey={_settings.ApiKey}";
+            }
+            
             var response = await _httpClient.GetAsync(url, cancellationToken);
             
             if (response.IsSuccessStatusCode)
@@ -181,17 +257,21 @@ public class OwaspZapService : IScannerService
                 
                 if (result?.Status == "100")
                 {
-                    _logger.LogInformation("Spider scan completed");
+                    _logger.LogInformation("Spider scan completed for scan ID: {ScanId}", scanId);
                     return;
                 }
                 
-                _logger.LogDebug("Spider scan progress: {Progress}%", result?.Status);
+                _logger.LogInformation("Spider scan progress: {Progress}% for scan ID: {ScanId}", result?.Status, scanId);
+            }
+            else
+            {
+                _logger.LogWarning("Failed to get spider status. Status code: {StatusCode}", response.StatusCode);
             }
 
             attempt++;
         }
         
-        _logger.LogWarning("Spider scan timeout or cancelled");
+        _logger.LogWarning("Spider scan timeout or cancelled for scan ID: {ScanId}", scanId);
     }
 
     private async Task ActiveScanAsync(string targetUrl, CancellationToken cancellationToken)
@@ -202,16 +282,24 @@ public class OwaspZapService : IScannerService
             url += $"&apikey={_settings.ApiKey}";
         }
 
+        _logger.LogInformation("Starting active scan for URL: {TargetUrl}", targetUrl);
         var response = await _httpClient.GetAsync(url, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        _logger.LogDebug("Active scan response: {Content}", content);
+        
         var result = JsonConvert.DeserializeObject<ZapApiResponse>(content);
         var scanId = result?.Scan;
 
         if (!string.IsNullOrEmpty(scanId))
         {
+            _logger.LogInformation("Active scan started with ID: {ScanId}", scanId);
             await WaitForActiveScanCompletionAsync(scanId, cancellationToken);
+        }
+        else
+        {
+            _logger.LogWarning("Active scan did not return a scan ID");
         }
     }
 
@@ -225,6 +313,11 @@ public class OwaspZapService : IScannerService
             await Task.Delay(10000, cancellationToken);
 
             var url = $"{_settings.ApiUrl}/JSON/ascan/view/status/?scanId={scanId}";
+            if (!string.IsNullOrEmpty(_settings.ApiKey))
+            {
+                url += $"&apikey={_settings.ApiKey}";
+            }
+            
             var response = await _httpClient.GetAsync(url, cancellationToken);
             
             if (response.IsSuccessStatusCode)
@@ -234,29 +327,43 @@ public class OwaspZapService : IScannerService
                 
                 if (result?.Status == "100")
                 {
-                    _logger.LogInformation("Active scan completed");
+                    _logger.LogInformation("Active scan completed for scan ID: {ScanId}", scanId);
                     return;
                 }
                 
-                _logger.LogDebug("Active scan progress: {Progress}%", result?.Status);
+                _logger.LogInformation("Active scan progress: {Progress}% for scan ID: {ScanId}", result?.Status, scanId);
+            }
+            else
+            {
+                _logger.LogWarning("Failed to get active scan status. Status code: {StatusCode}", response.StatusCode);
             }
 
             attempt++;
         }
         
-        _logger.LogWarning("Active scan timeout or cancelled");
+        _logger.LogWarning("Active scan timeout or cancelled for scan ID: {ScanId}", scanId);
     }
 
     private async Task<List<ZapAlert>> GetScanResultsAsync(CancellationToken cancellationToken)
     {
         var url = $"{_settings.ApiUrl}/JSON/core/view/alerts/";
+        if (!string.IsNullOrEmpty(_settings.ApiKey))
+        {
+            url += $"?apikey={_settings.ApiKey}";
+        }
+        
+        _logger.LogInformation("Retrieving scan results from ZAP");
         var response = await _httpClient.GetAsync(url, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
-        var result = JsonConvert.DeserializeObject<ZapAlertsResponse>(content);
+        _logger.LogDebug("Scan results response: {Content}", content);
         
-        return result?.Alerts ?? new List<ZapAlert>();
+        var result = JsonConvert.DeserializeObject<ZapAlertsResponse>(content);
+        var alerts = result?.Alerts ?? new List<ZapAlert>();
+        
+        _logger.LogInformation("Retrieved {AlertCount} alerts from ZAP", alerts.Count);
+        return alerts;
     }
 
     private List<VulnerabilityReport> ConvertZapVulnerabilities(List<ZapAlert> zapAlerts, string url)
@@ -303,6 +410,60 @@ public class OwaspZapService : IScannerService
             "INFORMATIONAL" => SeverityLevel.Info,
             _ => SeverityLevel.Info
         };
+    }
+
+    public async Task<bool> IsServiceAvailableAsync()
+    {
+        return await IsZapAvailableAsync(CancellationToken.None);
+    }
+
+    public async Task<string> GetServiceVersionAsync()
+    {
+        try
+        {
+            var url = $"{_settings.ApiUrl}/JSON/core/view/version/";
+            var response = await _httpClient.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                var result = JsonConvert.DeserializeObject<dynamic>(content);
+                return result?.version?.ToString() ?? "OWASP ZAP";
+            }
+        }
+        catch
+        {
+            // Ignore errors for version check
+        }
+        return "OWASP ZAP";
+    }
+
+    private async Task AddUrlToContextAsync(string targetUrl, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Access the URL to add it to ZAP's site tree
+            var accessUrl = $"{_settings.ApiUrl}/JSON/core/action/accessUrl/?url={Uri.EscapeDataString(targetUrl)}";
+            if (!string.IsNullOrEmpty(_settings.ApiKey))
+            {
+                accessUrl += $"&apikey={_settings.ApiKey}";
+            }
+
+            _logger.LogInformation("Adding URL to ZAP context: {TargetUrl}", targetUrl);
+            var response = await _httpClient.GetAsync(accessUrl, cancellationToken);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("Successfully added URL to ZAP context: {TargetUrl}", targetUrl);
+            }
+            else
+            {
+                _logger.LogWarning("Failed to add URL to ZAP context. Status: {StatusCode}", response.StatusCode);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error adding URL to ZAP context: {TargetUrl}", targetUrl);
+        }
     }
 }
 
