@@ -111,6 +111,17 @@ public class Program
                 inputFile = args[fileIndex + 1];
             }
 
+            // Get tools if specified
+            var tools = new List<string> { "headers" }; // Default to headers
+            var toolsIndex = Array.IndexOf(args, "--tools");
+            if (toolsIndex >= 0 && toolsIndex + 1 < args.Length)
+            {
+                var toolsArg = args[toolsIndex + 1];
+                tools = toolsArg.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim().ToLowerInvariant())
+                    .ToList();
+            }
+
             // Extract domains from command line arguments (excluding option values)
             var domains = new List<string>();
             for (int i = 0; i < args.Length; i++)
@@ -120,7 +131,7 @@ public class Program
                 // Skip options and their values
                 if (arg.StartsWith('-'))
                 {
-                    if (arg == "--output" || arg == "--file")
+                    if (arg == "--output" || arg == "--file" || arg == "--tools")
                     {
                         i++; // Skip the next argument which is the value
                     }
@@ -128,7 +139,7 @@ public class Program
                 }
                 
                 // Skip if this argument is a value for a previous option
-                if (i > 0 && (args[i-1] == "--output" || args[i-1] == "--file"))
+                if (i > 0 && (args[i-1] == "--output" || args[i-1] == "--file" || args[i-1] == "--tools"))
                 {
                     continue;
                 }
@@ -136,11 +147,27 @@ public class Program
                 domains.Add(arg);
             }
 
+            // Parse tools to scanner types
+            var scannerTypes = new List<Core.Models.ScannerType>();
+            foreach (var tool in tools)
+            {
+                var scannerType = tool switch
+                {
+                    "headers" => Core.Models.ScannerType.SecurityHeaders,
+                    "ssl" => Core.Models.ScannerType.SslLabs,
+                    "zap" => Core.Models.ScannerType.OwaspZap,
+                    "loadtest" => Core.Models.ScannerType.LoadTest,
+                    "nmap" => Core.Models.ScannerType.Nmap,
+                    _ => throw new ArgumentException($"Unknown scanner tool: {tool}")
+                };
+                scannerTypes.Add(scannerType);
+            }
+
             // Create a basic scan request
             var request = new ScanCommandRequest
             {
                 Domains = domains,
-                Tools = new List<Core.Models.ScannerType> { Core.Models.ScannerType.SecurityHeaders },
+                Tools = scannerTypes,
                 JsonOutput = jsonOutput,
                 OutputFile = outputFile,
                 InputFile = inputFile,
