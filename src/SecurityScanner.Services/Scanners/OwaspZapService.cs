@@ -304,6 +304,31 @@ public class OwaspZapService : IScannerService
             _ => SeverityLevel.Info
         };
     }
+
+    public async Task<bool> IsServiceAvailableAsync()
+    {
+        return await IsZapAvailableAsync(CancellationToken.None);
+    }
+
+    public async Task<string> GetServiceVersionAsync()
+    {
+        try
+        {
+            var url = $"{_settings.ApiUrl}/JSON/core/view/version/";
+            var response = await _httpClient.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                var result = JsonConvert.DeserializeObject<dynamic>(content);
+                return result?.version?.ToString() ?? "OWASP ZAP";
+            }
+        }
+        catch
+        {
+            // Ignore errors for version check
+        }
+        return "OWASP ZAP";
+    }
 }
 
 // ZAP API Response Models

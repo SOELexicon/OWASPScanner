@@ -43,6 +43,15 @@ public class SecurityHeadersSettings
     public int MaxRedirects { get; set; } = 5;
 }
 
+public class LoadTestSettings
+{
+    public int RequestsPerSecond { get; set; } = 10;
+    public int DurationSeconds { get; set; } = 60;
+    public int RampUpSeconds { get; set; } = 10;
+    public int MaxConcurrentRequests { get; set; } = 50;
+    public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(30);
+}
+
 public class ReportSettings
 {
     public string OutputDirectory { get; set; } = "reports";

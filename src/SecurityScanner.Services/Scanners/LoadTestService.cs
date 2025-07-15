@@ -15,7 +15,7 @@ public class LoadTestService : IScannerService
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<LoadTestService> _logger;
-    private readonly LoadTestSettings _settings;
+    private readonly SecurityScanner.Infrastructure.Configuration.LoadTestSettings _settings;
 
     public LoadTestService(
         IHttpClientFactory httpClientFactory,
@@ -330,6 +330,20 @@ public class LoadTestService : IScannerService
             return typedValue;
         }
         return defaultValue;
+    }
+
+    public async Task<bool> IsServiceAvailableAsync()
+    {
+        // Load testing doesn't require external service, it's always available
+        await Task.CompletedTask;
+        return true;
+    }
+
+    public async Task<string> GetServiceVersionAsync()
+    {
+        // Return the internal version of our load testing service
+        await Task.CompletedTask;
+        return "SecurityScanner Load Test v1.0";
     }
 }
 

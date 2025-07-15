@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using SecurityScanner.Commands.Models;
 using SecurityScanner.Core.Exceptions;
+using SecurityScanner.Core.Models;
 
 namespace SecurityScanner.Commands.Middleware;
 

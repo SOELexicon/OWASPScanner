@@ -14,10 +14,12 @@ public static class CommandLineParser
         var jsonOption = new Option<bool>("--json") { Description = "Output results in JSON format" };
         var outputOption = new Option<string?>("--output") { Description = "Save output to specified file" };
         var verboseOption = new Option<bool>("--verbose") { Description = "Enable verbose logging" };
+        var fileOption = new Option<string?>("--file") { Description = "JSON file containing array of URLs to scan" };
 
         rootCommand.Options.Add(jsonOption);
         rootCommand.Options.Add(outputOption);
         rootCommand.Options.Add(verboseOption);
+        rootCommand.Options.Add(fileOption);
 
         // Scan command (default)
         var scanCommand = CreateScanCommand();
@@ -57,6 +59,10 @@ public static class CommandLineParser
             Arity = ArgumentArity.ZeroOrMore
         };
 
+        var fileOption = new Option<string?>("--file") 
+        { 
+            Description = "JSON file containing array of URLs to scan" 
+        };
         var allOption = new Option<bool>("--all") { Description = "Scan all configured domains" };
         var toolsOption = new Option<string[]>("--tools") 
         {
@@ -102,6 +108,7 @@ public static class CommandLineParser
         };
 
         scanCommand.Arguments.Add(domainsArgument);
+        scanCommand.Options.Add(fileOption);
         scanCommand.Options.Add(allOption);
         scanCommand.Options.Add(toolsOption);
         scanCommand.Options.Add(maxConcurrentOption);
@@ -170,13 +177,14 @@ public static class CommandLineParser
 
     public static ScanCommandRequest ParseScanRequest(string[] domains, bool all, string[] tools, 
         int maxConcurrent, int timeout, bool parallel, int loadTestRps, int loadTestDuration, 
-        int loadTestRampUp, int loadTestMaxConcurrent, bool jsonOutput, string? outputFile, bool verbose)
+        int loadTestRampUp, int loadTestMaxConcurrent, bool jsonOutput, string? outputFile, bool verbose, string? inputFile = null)
     {
         var request = new ScanCommandRequest
         {
             JsonOutput = jsonOutput,
             OutputFile = outputFile,
             Verbose = verbose,
+            InputFile = inputFile,
             ScanAll = all,
             MaxConcurrent = maxConcurrent,
             TimeoutSeconds = timeout,

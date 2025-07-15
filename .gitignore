@@ -186,3 +186,4 @@ claude_project_instructions.md
 CLAUDE.md
 security_scanner_project.md
 .claude/settings.local.json
+src/SecurityScanner.Services/obj/Debug/net9.0/SecurityScanner.Services.sourcelink.json

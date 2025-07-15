@@ -13,6 +13,7 @@ public class ScanCommandRequest : CommandRequest
 {
     public List<string> Domains { get; set; } = new();
     public List<ScannerType> Tools { get; set; } = new() { ScannerType.SecurityHeaders };
+    public string? InputFile { get; set; }
     public bool ScanAll { get; set; }
     public int MaxConcurrent { get; set; } = 3;
     public int TimeoutSeconds { get; set; } = 300;

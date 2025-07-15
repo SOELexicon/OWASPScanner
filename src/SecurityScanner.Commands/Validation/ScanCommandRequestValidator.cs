@@ -9,8 +9,8 @@ public class ScanCommandRequestValidator : AbstractValidator<ScanCommandRequest>
     public ScanCommandRequestValidator()
     {
         RuleFor(x => x.Domains)
-            .Must((request, domains) => domains.Count > 0 || request.ScanAll)
-            .WithMessage("At least one domain must be specified or --all flag must be used");
+            .Must((request, domains) => domains.Count > 0 || request.ScanAll || !string.IsNullOrEmpty(request.InputFile))
+            .WithMessage("At least one domain must be specified, --all flag must be used, or --file option must be provided");
 
         RuleForEach(x => x.Domains)
             .Must(BeValidDomain)

@@ -6,6 +6,7 @@ using SecurityScanner.App.Extensions;
 using SecurityScanner.Commands.Handlers;
 using SecurityScanner.Commands.Models;
 using SecurityScanner.Commands.Parsing;
+using SecurityScanner.Core.Models;
 using System.CommandLine;
 
 namespace SecurityScanner.App;
@@ -34,9 +35,9 @@ public class Program
             }
 
             // Handle scan command manually (simplified approach for beta version)
-            if (args.Length > 0 && !args[0].StartsWith('-'))
+            if (args.Length > 0 && (!args[0].StartsWith('-') || args.Contains("--file")))
             {
-                // Direct domain scan
+                // Direct domain scan (with domains or file input)
                 await HandleSimpleScanAsync(host.Services, args);
                 return 0;
             }
@@ -90,8 +91,7 @@ public class Program
         
         try
         {
-            // Extract domains from command line arguments (simplified)
-            var domains = args.Where(arg => !arg.StartsWith('-')).ToArray();
+            // Parse command line arguments
             var jsonOutput = args.Contains("--json");
             var verbose = args.Contains("--verbose");
             
@@ -103,13 +103,47 @@ public class Program
                 outputFile = args[outputIndex + 1];
             }
 
+            // Get input file if specified
+            string? inputFile = null;
+            var fileIndex = Array.IndexOf(args, "--file");
+            if (fileIndex >= 0 && fileIndex + 1 < args.Length)
+            {
+                inputFile = args[fileIndex + 1];
+            }
+
+            // Extract domains from command line arguments (excluding option values)
+            var domains = new List<string>();
+            for (int i = 0; i < args.Length; i++)
+            {
+                var arg = args[i];
+                
+                // Skip options and their values
+                if (arg.StartsWith('-'))
+                {
+                    if (arg == "--output" || arg == "--file")
+                    {
+                        i++; // Skip the next argument which is the value
+                    }
+                    continue;
+                }
+                
+                // Skip if this argument is a value for a previous option
+                if (i > 0 && (args[i-1] == "--output" || args[i-1] == "--file"))
+                {
+                    continue;
+                }
+                
+                domains.Add(arg);
+            }
+
             // Create a basic scan request
             var request = new ScanCommandRequest
             {
-                Domains = domains.ToList(),
+                Domains = domains,
                 Tools = new List<Core.Models.ScannerType> { Core.Models.ScannerType.SecurityHeaders },
                 JsonOutput = jsonOutput,
                 OutputFile = outputFile,
+                InputFile = inputFile,
                 Verbose = verbose,
                 MaxConcurrent = 3,
                 TimeoutSeconds = 300,
