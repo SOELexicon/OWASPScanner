@@ -187,3 +187,13 @@ CLAUDE.md
 security_scanner_project.md
 .claude/settings.local.json
 src/SecurityScanner.Services/obj/Debug/net9.0/SecurityScanner.Services.sourcelink.json
+/src/SecurityScanner.App/.vs/SecurityScanner.App
+/src/SecurityScanner.App/bin/Debug/net9.0
+/src/SecurityScanner.App/obj/Debug/net9.0/apphost.exe
+/src/SecurityScanner.App/obj/Debug/net9.0/SecurityScanner.App.sourcelink.json
+/src/SecurityScanner.Commands/obj/Debug/net9.0/SecurityScanner.Commands.sourcelink.json
+/src/SecurityScanner.Core/obj/Debug/net9.0/SecurityScanner.Core.sourcelink.json
+/src/SecurityScanner.Infrastructure/obj/Debug/net9.0/SecurityScanner.Infrastructure.sourcelink.json
+/.vs/SecurityScanner/v17
+/.vs/SecurityScanner/FileContentIndex
+/.vs/SecurityScanner/CopilotIndices/17.14.827.52834
