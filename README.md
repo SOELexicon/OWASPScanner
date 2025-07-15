@@ -31,6 +31,7 @@ A comprehensive, enterprise-grade security scanning tool for web applications an
 ### Prerequisites
 - [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
 - Git (for cloning the repository)
+- [OWASP ZAP](https://www.zaproxy.org/) (optional, for vulnerability scanning)
 
 ### Installation
 
@@ -48,6 +49,70 @@ dotnet build
 # Run a basic scan
 dotnet run --project src/SecurityScanner.App -- example.com --json
 ```
+
+### OWASP ZAP Installation (Optional)
+
+OWASP ZAP is required only if you want to use the `zap` scanner. You can use all other scanners without it.
+
+#### Windows
+1. Download OWASP ZAP from [zaproxy.org](https://www.zaproxy.org/download/)
+2. Run the installer and follow the setup wizard
+3. Start ZAP and enable the API:
+   - Go to `Tools > Options > API`
+   - Enable the API and note the API key
+   - Set API address to `http://localhost:8080`
+
+#### Linux/macOS
+```bash
+# Using package manager (Ubuntu/Debian)
+sudo apt update
+sudo apt install zaproxy
+
+# Using Homebrew (macOS)
+brew install owasp-zap
+
+# Using Docker (all platforms)
+docker run -d -p 8080:8080 owasp/zap2docker-stable zap.sh -daemon -host 0.0.0.0 -port 8080
+```
+
+#### Docker Setup (Recommended)
+```bash
+# Start ZAP daemon in Docker
+docker run -d --name zap-daemon -p 8080:8080 owasp/zap2docker-stable zap.sh -daemon -host 0.0.0.0 -port 8080
+
+# Test ZAP is running
+curl http://localhost:8080/JSON/core/view/version/
+```
+
+#### Configuration
+After installing ZAP, configure the scanner:
+
+1. **Via Environment Variables:**
+   ```bash
+   export SCANNER_OwaspZap__ApiUrl="http://localhost:8080"
+   export SCANNER_OwaspZap__ApiKey="your-api-key"
+   ```
+
+2. **Via appsettings.json:**
+   ```json
+   {
+     "ScannerSettings": {
+       "OwaspZap": {
+         "ApiUrl": "http://localhost:8080",
+         "ApiKey": "your-api-key",
+         "EnableActiveScan": true,
+         "EnablePassiveScan": true,
+         "ScanTimeout": "00:30:00"
+       }
+     }
+   }
+   ```
+
+3. **Test ZAP Integration:**
+   ```bash
+   # Test that ZAP scanner is available
+   dotnet run --project src/SecurityScanner.App -- example.com --tools zap --json
+   ```
 
 ### Basic Usage
 

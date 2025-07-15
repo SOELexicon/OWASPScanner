@@ -61,13 +61,20 @@ public class SecurityHeadersService : IScannerService
         catch (HttpRequestException ex)
         {
             result.Status = ScanStatus.Failed;
-            result.ErrorMessage = $"HTTP request failed: {ex.Message}";
+            if (ex.Message.Contains("No such host is known"))
+            {
+                result.ErrorMessage = "DNS resolution failed - domain not found";
+            }
+            else
+            {
+                result.ErrorMessage = $"HTTP request failed: {ex.Message}";
+            }
             _logger.LogError(ex, "HTTP request failed for {Domain}", domain.Name);
         }
         catch (TaskCanceledException ex)
         {
             result.Status = ScanStatus.Timeout;
-            result.ErrorMessage = "Request timed out";
+            result.ErrorMessage = "Request timed out after 2 minutes";
             _logger.LogWarning(ex, "Request timed out for {Domain}", domain.Name);
         }
         catch (Exception ex)
